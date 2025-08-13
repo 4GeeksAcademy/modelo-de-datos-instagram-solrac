@@ -5,12 +5,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 db = SQLAlchemy()
 
 #las tablas de asociacion se crean antes de las clases.
-# follower_table= Table(
-#     "follower_table",#declaramos el nombre de la tabla
-#     db.model.metadata,
-#     Column("Followed", ForeignKey("user.id")),#columna de como se llamara y lo que ira dentro.
-#     Column("Follower", ForeignKey("user.id"))#columna de como se llamara y lo que ira dentro.
-# )
+follower_table= Table(
+     "follower_table",#declaramos el nombre de la tabla
+     db.Model.metadata,
+     Column("followed_id", ForeignKey("user.id")),
+     Column("follower_id", ForeignKey("user.id"))
+ )
 
 class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -18,12 +18,21 @@ class User(db.Model):
     firstname: Mapped[str]= mapped_column(String(65), nullable=False)
     lastname: Mapped[str]= mapped_column(String(65), nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(nullable=False)
-    # follower_table: Mapped[list["User"]] = relationship(
-    #     "User",
-    #     secondary= follower_table,
-    #     backref= "user"
-    #)
+    posts: Mapped[list["Post"]] = relationship( back_populates="author")
+    followers: Mapped[list["User"]] = relationship(
+        "User", 
+        secondary=follower_table, 
+        primaryjoin= id == follower_table.c.followed_id, 
+        secondaryjoin= id == follower_table.c.follower_id,
+        back_populates="following"
+    )
+    following: Mapped[list["User"]] = relationship(
+        "User",
+        secondary=follower_table,
+        primaryjoin= id == follower_table.c.follower_id,
+        secondaryjoin = id == follower_table.c.followed_id,
+        back_populates= "followers"
+    )
     
     def serialize(self):
         return {
@@ -32,20 +41,15 @@ class User(db.Model):
             "username": self.username,
             "firstname": self.firstname,
             "lastname": self.lastname,
-            #"follower_table": [User.serialize() for user in self.follower_table]#a esto se le llama lista de compresión
-            # do not serialize the password, its a security breach
         }
 
-class follower(db.Model):
-    user_from_id: Mapped[int] = mapped_column(primary_key=True)
-    user_to_id: Mapped[int] = mapped_column(primary_key=True)
 
-class comment(db.Model):
+class Comment(db.Model):
     id: Mapped[int] = mapped_column(primary_key = True)
     comment_text: Mapped[str]= mapped_column(String(250), nullable=False)
-    author_id: Mapped[int] = mapped_column(unique=True)
-    post_id: Mapped[int] = mapped_column(foraignKey="Post")
-
+    author_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    post_id: Mapped[int] = mapped_column(ForeignKey("post.id"))
+    post_comment:Mapped["Post"]= relationship(back_populates="comments")
     def serialize(self):
         return{
             "id": self.id,
@@ -55,9 +59,12 @@ class comment(db.Model):
         }
 
 
-class post(db.Model):
+class Post(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[list["Media","comment"]] = relationship()
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    author: Mapped["User"] = relationship(back_populates="posts")
+    comments: Mapped[list["Comment"]] = relationship(back_populates="post_comment")
+    medias:Mapped[list["Media"]] = relationship(back_populates="post_media")
 
     def serialeze(self):{
         "id": self.id,
@@ -68,7 +75,8 @@ class Media(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[int] = mapped_column()
     url: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
-    post: Mapped[int] = mapped_column()
+    post_id: Mapped[int] = mapped_column(ForeignKey("post.id"))
+    post_media: Mapped["Post"] = relationship(back_populates="medias")
     
     def serialize(self):{
         "id": self.id,
